@@ -1,11 +1,12 @@
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 
-#define CL_HPP_TARGET_OPENCL_VERSION 120
-#define CL_HPP_MINIMUM_OPENCL_VERSION 120
+#define CL_HPP_TARGET_OPENCL_VERSION 200
+#define CL_HPP_MINIMUM_OPENCL_VERSION 200
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 
@@ -20,6 +21,23 @@ static int64_t timeInMicros() {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   return tv.tv_sec * 1000000 + tv.tv_usec;
+}
+
+static char *readBinaryFile(const char *path, size_t *fileSize) {
+  FILE *f = fopen(path, "r");
+  assert(NULL != f);
+  fseek(f, 0, SEEK_END);
+  long length = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  char *buffer = malloc(length);
+  if (fread(buffer, 1, length, f) < (size_t)length) {
+    return NULL;
+  }
+  fclose(f);
+  if (NULL != fileSize) {
+    *fileSize = length;
+  }
+  return buffer;
 }
 
 int main(int argc, char *argv[]) {
@@ -59,41 +77,52 @@ int main(int argc, char *argv[]) {
   cl_device_id *devices;
   status =
       clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
-  if (numDevices == 0) // no GPU available.
-  {
+  checkError(status, "clGetDeviceIDs");
+  if (numDevices == 0) {
+    // no GPU available.
     fprintf(stdout, "No GPU device available.\n");
     fprintf(stdout, "Choose CPU as default device.\n");
     status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_CPU, 0, NULL,
                             &numDevices);
+    checkError(status, "clGetDeviceIDs");
+
     devices =
         (cl_device_id *)malloc(numDevices * sizeof(cl_device_id));
     status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_CPU,
                             numDevices, devices, NULL);
+    checkError(status, "clGetDeviceIDs");
   } else {
     devices =
         (cl_device_id *)malloc(numDevices * sizeof(cl_device_id));
     status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU,
                             numDevices, devices, NULL);
+    checkError(status, "clGetDeviceIDs");
   }
 
   size_t valueSize;
   char *value;
-  clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, NULL, &valueSize);
+  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, NULL, &valueSize);
+  checkError(status, "clGetDeviceInfo");
 
   value = (char *)malloc(valueSize);
 
-  clGetDeviceInfo(devices[0], CL_DEVICE_NAME, valueSize, value, NULL);
+  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, valueSize, value, NULL);
+  checkError(status, "clGetDeviceInfo");
   printf("Using OpenCL device: %s\n", value);
 
   /*Step 3: Create context.*/
   cl_context context =
-      clCreateContext(NULL, 1, devices, NULL, NULL, NULL);
+      clCreateContext(NULL, 1, devices, NULL, NULL, &status);
+  checkError(status, "clCreateContext");
 
   /*Step 4: Creating command queue associate with the
 	 * context.*/
   cl_command_queue commandQueue =
-      clCreateCommandQueue(context, devices[0], 0, NULL);
+      clCreateCommandQueue(context, devices[0], 0, &status);
+  checkError(status, "clCreateCommandQueue");
 
+  cl_program program;
+#ifdef BUILD_FROM_SOURCE
   char *sourcepath = "my_kernel.cl";
   FILE *fp = fopen(sourcepath, "r");
 
@@ -110,11 +139,25 @@ int main(int argc, char *argv[]) {
 
   size_t source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
 
-  cl_program program = clCreateProgramWithSource(context, 1, (const char **)&source_str, &source_size, NULL);
-
+  program = clCreateProgramWithSource(context, 1, (const char **)&source_str, &source_size, &status);
+  checkError(status, "clCreateProgramWithSource");
+#else
+  // load pre-built IR
+  size_t binary_size;
+  char *binary = readBinaryFile("my_kernel.bc", &binary_size);
+  cl_int binary_status[1], errcode_ret[1];
+  program = clCreateProgramWithBinary(
+      context, 1, devices, &binary_size,
+      (const unsigned char **)&binary, binary_status, errcode_ret);
+  checkError(binary_status[0], "clCreateProgramWithBinary - binary status");
+  checkError(errcode_ret[0], "clCreateProgramWithBinary");
+  free(binary);
+#endif
   status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
+  checkError(status, "clBuildProgram");
 
-  cl_kernel kernel = clCreateKernel(program, "vadd", NULL);
+  cl_kernel kernel = clCreateKernel(program, "vadd", &status);
+  checkError(status, "clCreateKernel");
 
   cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                               LENGTH * sizeof(float), (void *)h_a, NULL);
