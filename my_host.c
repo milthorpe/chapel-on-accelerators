@@ -15,6 +15,7 @@
 #define TOL (0.001)      // tolerance used in floating point comparisons
 #define LENGTH (2 << 24) // length of vectors a, b, and c
 #define MAX_SOURCE_SIZE (0x100000)
+#define BUILD_FROM_SOURCE
 
 /** Get CPU time in microseconds */
 static int64_t timeInMicros() {
@@ -23,6 +24,7 @@ static int64_t timeInMicros() {
   return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
+#ifndef BUILD_FROM_SOURCE
 static char *readBinaryFile(const char *path, size_t *fileSize) {
   FILE *f = fopen(path, "r");
   assert(NULL != f);
@@ -39,6 +41,7 @@ static char *readBinaryFile(const char *path, size_t *fileSize) {
   }
   return buffer;
 }
+#endif
 
 int main(int argc, char *argv[]) {
   float *h_a = malloc(LENGTH * sizeof(float));
@@ -75,8 +78,7 @@ int main(int argc, char *argv[]) {
 	 * one.Otherwise use the CPU as device.*/
   cl_uint numDevices = 0;
   cl_device_id *devices;
-  status =
-      clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
+  status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
   checkError(status, "clGetDeviceIDs");
   if (numDevices == 0) {
     // no GPU available.
@@ -122,6 +124,8 @@ int main(int argc, char *argv[]) {
   checkError(status, "clCreateCommandQueue");
 
   cl_program program;
+  size_t binary_size;
+  char *binary;
 #ifdef BUILD_FROM_SOURCE
   char *sourcepath = "my_kernel.cl";
   FILE *fp = fopen(sourcepath, "r");
@@ -143,8 +147,7 @@ int main(int argc, char *argv[]) {
   checkError(status, "clCreateProgramWithSource");
 #else
   // load pre-built IR
-  size_t binary_size;
-  char *binary = readBinaryFile("my_kernel.bc", &binary_size);
+  binary = readBinaryFile("my_kernel.ll", &binary_size);
   cl_int binary_status[1], errcode_ret[1];
   program = clCreateProgramWithBinary(
       context, 1, devices, &binary_size,
@@ -155,6 +158,15 @@ int main(int argc, char *argv[]) {
 #endif
   status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
   checkError(status, "clBuildProgram");
+
+  status = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &binary_size, NULL);
+  checkError(status, "clGetProgramInfo");
+  binary = malloc(binary_size);
+  status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, binary_size, &binary, NULL);
+  checkError(status, "clGetProgramInfo");
+  FILE *f = fopen("tmp.bc", "w");
+  fwrite(binary, binary_size, 1, f);
+  fclose(f);
 
   cl_kernel kernel = clCreateKernel(program, "vadd", &status);
   checkError(status, "clCreateKernel");
