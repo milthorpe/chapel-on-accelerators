@@ -79,7 +79,6 @@ int main(int argc, char *argv[]) {
   cl_uint numDevices = 0;
   cl_device_id *devices;
   status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
-  checkError(status, "clGetDeviceIDs");
   if (numDevices == 0) {
     // no GPU available.
     fprintf(stdout, "No GPU device available.\n");
