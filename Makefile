@@ -1,12 +1,25 @@
 # example build commands to generate SPIR-V from an OpenCL kernel
 #
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  # Use Apple's OpenCL runtime
+  CCLIBS += -framework OpenCL
+  # or use the installed POCL runtime
+  # CCLIBS += -L/usr/local/lib -lOpenCL #
+else
+  CCLIBS += -lOpenCL -lm -ldl
+  CFLAGS += -std=gnu99
+endif
 CC = clang-9
 CXX = clang-9
 SPIRV_LLVM = SPIRV-LLVM-Translator/build/tools/llvm-spirv/llvm-spirv
 CLANG_KERNEL_FLAGS = -c -x cl -emit-llvm -target spir64-unknown-unknown -cl-std=CL2.0 -Xclang -finclude-default-header
 CFLAGS = -Wall -g -lOpenCL -lrt
 
-all: my_kernel.spv my_host.exe
+all: opencl_device_query my_kernel.spv my_host.exe
+
+opencl_device_query: opencl_device_query.c
+	$(CC) opencl_device_query.c $(CFLAGS) -o opencl_device_query $(CCLIBS)
 
 %.exe: %.c
 	$(CC) $(CFLAGS) $< -o $@
