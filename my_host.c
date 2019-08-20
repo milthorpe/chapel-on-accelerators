@@ -44,6 +44,12 @@ static char *readBinaryFile(const char *path, size_t *fileSize) {
 #endif
 
 int main(int argc, char *argv[]) {
+  if (argc < 3) {
+    fprintf(stderr, "./my_host.exe <platform id> <device id>\n");
+    exit(1);
+  }
+  int platformId = atoi(argv[1]);
+  int deviceId = atoi(argv[2]);
   float *h_a = malloc(LENGTH * sizeof(float));
   float *h_b = malloc(LENGTH * sizeof(float));
   float *h_c = malloc(LENGTH * sizeof(float));
@@ -56,7 +62,7 @@ int main(int argc, char *argv[]) {
     h_b[i] = rand() / (float)RAND_MAX;
   }
 
-  /*Step1: Getting platforms and choose an available one.*/
+  /* Select the chosen platform */
   cl_uint numPlatforms;           // the NO. of platforms
   cl_platform_id platform = NULL; // the chosen platform
   cl_int status = clGetPlatformIDs(0, NULL, &numPlatforms);
@@ -65,41 +71,32 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  /*For clarity, choose the first available platform. */
-  if (numPlatforms > 0) {
+  if (platformId < numPlatforms) {
     cl_platform_id *platforms = (cl_platform_id *)malloc(
         numPlatforms * sizeof(cl_platform_id));
     status = clGetPlatformIDs(numPlatforms, platforms, NULL);
-    platform = platforms[0];
+    platform = platforms[platformId];
     free(platforms);
+  } else {
+    fprintf(stderr, "Invalid platform: %d\n", platformId);
+    exit(1);
   }
 
-  /*Step 2:Query the platform and choose the first GPU device if has
-	 * one.Otherwise use the CPU as device.*/
+  /* Query the platform and select the chosen device */
   cl_uint numDevices = 0;
   cl_device_id *devices;
-  status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
+  status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, NULL, &numDevices);
   checkError(status, "clGetDeviceIDs");
-  if (numDevices == 0) {
-    // no GPU available.
-    fprintf(stdout, "No GPU device available.\n");
-    fprintf(stdout, "Choose CPU as default device.\n");
-    status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_CPU, 0, NULL,
-                            &numDevices);
-    checkError(status, "clGetDeviceIDs");
-
-    devices =
-        (cl_device_id *)malloc(numDevices * sizeof(cl_device_id));
-    status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_CPU,
-                            numDevices, devices, NULL);
-    checkError(status, "clGetDeviceIDs");
-  } else {
-    devices =
-        (cl_device_id *)malloc(numDevices * sizeof(cl_device_id));
-    status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU,
-                            numDevices, devices, NULL);
-    checkError(status, "clGetDeviceIDs");
+  if (deviceId >= numDevices) {
+    fprintf(stderr, "Invalid device: %d\n", deviceId);
+    exit(1);
   }
+
+  devices =
+      (cl_device_id *)malloc(numDevices * sizeof(cl_device_id));
+  status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL,
+                          -numDevices, devices, NULL);
+  checkError(status, "clGetDeviceIDs");
 
   size_t valueSize;
   char *value;
