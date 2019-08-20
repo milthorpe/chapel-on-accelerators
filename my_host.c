@@ -98,16 +98,16 @@ int main(int argc, char *argv[]) {
                           -numDevices, devices, NULL);
   checkError(status, "clGetDeviceIDs");
 
-  size_t valueSize;
-  char *value;
-  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, NULL, &valueSize);
+  size_t deviceNameSize;
+  char *deviceName;
+  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, NULL, &deviceNameSize);
   checkError(status, "clGetDeviceInfo");
 
-  value = (char *)malloc(valueSize);
+  deviceName = (char *)malloc(deviceNameSize);
 
-  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, valueSize, value, NULL);
+  status = clGetDeviceInfo(devices[0], CL_DEVICE_NAME, deviceNameSize, deviceName, NULL);
   checkError(status, "clGetDeviceInfo");
-  printf("Using OpenCL device: %s\n", value);
+  printf("Using OpenCL device: %s\n", deviceName);
 
   /*Step 3: Create context.*/
   cl_context context =
@@ -161,7 +161,9 @@ int main(int argc, char *argv[]) {
   binary = malloc(binary_size);
   status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, binary_size, &binary, NULL);
   checkError(status, "clGetProgramInfo");
-  FILE *f = fopen("tmp.bc", "w");
+  char filename[20];
+  sprintf(filename, "binary_%d.bc", platformId);
+  FILE *f = fopen(filename, "w");
   fwrite(binary, binary_size, 1, f);
   fclose(f);
 
