@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #define CL_HPP_TARGET_OPENCL_VERSION 200
 #define CL_HPP_MINIMUM_OPENCL_VERSION 200
@@ -15,7 +17,6 @@
 #define TOL (0.001)      // tolerance used in floating point comparisons
 #define LENGTH (2 << 24) // length of vectors a, b, and c
 #define MAX_SOURCE_SIZE (0x100000)
-#define BUILD_FROM_SOURCE
 
 /** Get CPU time in microseconds */
 static int64_t timeInMicros() {
@@ -24,10 +25,12 @@ static int64_t timeInMicros() {
   return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
-#ifndef BUILD_FROM_SOURCE
 static char *readBinaryFile(const char *path, size_t *fileSize) {
   FILE *f = fopen(path, "r");
-  assert(NULL != f);
+  if (f == NULL) {
+    fprintf(stderr, "file %s could not be opened\n", path);
+    exit(1);
+  }
   fseek(f, 0, SEEK_END);
   long length = ftell(f);
   fseek(f, 0, SEEK_SET);
@@ -41,15 +44,54 @@ static char *readBinaryFile(const char *path, size_t *fileSize) {
   }
   return buffer;
 }
-#endif
+
+void printUsage() {
+  fprintf(stderr, "./my_host.exe -p <platform id> -d <device id> [-i] [-b]\n");
+}
 
 int main(int argc, char *argv[]) {
-  if (argc < 3) {
-    fprintf(stderr, "./my_host.exe <platform id> <device id>\n");
-    exit(1);
+  int platformId = 0;
+  int deviceId = 0;
+  bool useIR = false;
+  bool useBinary = false;
+  char c;
+  while ((c = getopt(argc, argv, "p:d:bi?")) != -1) {
+    switch (c) {
+    case 'p':
+      platformId = atoi(optarg);
+      break;
+    case 'd':
+      deviceId = atoi(optarg);
+      break;
+    case 'i':
+      if (useBinary) {
+        fprintf(stderr, "Options -i and -b are incompatible (choose one of intermediate representation or binary)\n");
+        exit(1);
+      }
+      useIR = true;
+      break;
+    case 'b':
+      if (useIR) {
+        fprintf(stderr, "Options -i and -b are incompatible (choose one of intermediate representation or binary)\n");
+        exit(1);
+      }
+      useBinary = true;
+      break;
+    case '?':
+      printUsage();
+    default:
+      exit(1);
+    }
   }
-  int platformId = atoi(argv[1]);
-  int deviceId = atoi(argv[2]);
+  printf("Using platform %i device %i, building program from ", platformId, deviceId);
+  if (useBinary) {
+    printf("binary\n");
+  } else if (useIR) {
+    printf("intermediate-level representation\n");
+  } else {
+    printf("source\n");
+  }
+
   float *h_a = malloc(LENGTH * sizeof(float));
   float *h_b = malloc(LENGTH * sizeof(float));
   float *h_c = malloc(LENGTH * sizeof(float));
@@ -121,50 +163,53 @@ int main(int argc, char *argv[]) {
   checkError(status, "clCreateCommandQueue");
 
   cl_program program;
-  size_t binary_size;
+  size_t binarySize;
   char *binary;
-#ifdef BUILD_FROM_SOURCE
-  char *sourcepath = "my_kernel.cl";
-  FILE *fp = fopen(sourcepath, "r");
 
-  if (!fp) {
+  if (useBinary) {
+    char filename[20];
+    sprintf(filename, "my_kernel_%d.bc", platformId);
+    binary = readBinaryFile(filename, &binarySize);
+    cl_int binary_status[1], errcode_ret[1];
+    program = clCreateProgramWithBinary(
+        context, 1, devices, &binarySize,
+        (const unsigned char **)&binary, binary_status, errcode_ret);
+    checkError(binary_status[0], "clCreateProgramWithBinary - binary status");
+    checkError(errcode_ret[0], "clCreateProgramWithBinary");
+    free(binary);
+  } else if (useIR) {
+    binary = readBinaryFile("my_kernel.spirv", &binarySize);
+    program = clCreateProgramWithIL(
+        context, (const void *)&binary, binarySize, &status);
+    checkError(status, "clCreateProgramWithIL");
+    free(binary);
+  } else {
 
-    fprintf(stderr, "Failed to open kernel file '%s': %s\n", sourcepath,
+    char *sourcepath = "my_kernel.cl";
+    FILE *fp = fopen(sourcepath, "r");
+    if (!fp) {
+      fprintf(stderr, "Failed to open kernel file '%s': %s\n", sourcepath, strerror(errno));
+      exit(2);
+    }
 
-            strerror(errno));
+    char *source_str = malloc(MAX_SOURCE_SIZE * sizeof(char));
+    size_t source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
 
-    exit(2);
+    program = clCreateProgramWithSource(context, 1, (const char **)&source_str, &source_size, &status);
+    checkError(status, "clCreateProgramWithSource");
   }
-
-  char *source_str = malloc(MAX_SOURCE_SIZE * sizeof(char));
-
-  size_t source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
-
-  program = clCreateProgramWithSource(context, 1, (const char **)&source_str, &source_size, &status);
-  checkError(status, "clCreateProgramWithSource");
-#else
-  // load pre-built IR
-  binary = readBinaryFile("my_kernel.ll", &binary_size);
-  cl_int binary_status[1], errcode_ret[1];
-  program = clCreateProgramWithBinary(
-      context, 1, devices, &binary_size,
-      (const unsigned char **)&binary, binary_status, errcode_ret);
-  checkError(binary_status[0], "clCreateProgramWithBinary - binary status");
-  checkError(errcode_ret[0], "clCreateProgramWithBinary");
-  free(binary);
-#endif
   status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
   checkError(status, "clBuildProgram");
 
-  status = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &binary_size, NULL);
+  status = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &binarySize, NULL);
   checkError(status, "clGetProgramInfo");
-  binary = malloc(binary_size);
-  status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, binary_size, &binary, NULL);
+  binary = malloc(binarySize);
+  status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, binarySize, &binary, NULL);
   checkError(status, "clGetProgramInfo");
   char filename[20];
-  sprintf(filename, "binary_%d.bc", platformId);
+  sprintf(filename, "my_kernel_%d.bc", platformId);
   FILE *f = fopen(filename, "w");
-  fwrite(binary, binary_size, 1, f);
+  fwrite(binary, binarySize, 1, f);
   fclose(f);
 
   cl_kernel kernel = clCreateKernel(program, "vadd", &status);
