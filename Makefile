@@ -10,13 +10,13 @@ else
   CCLIBS += -lOpenCL -lm -ldl
   CFLAGS += -std=gnu99
 endif
-CC = clang-9
-CXX = clang-9
+CC = clang-10
+CXX = clang-10
 SPIRV_LLVM = SPIRV-LLVM-Translator/build/tools/llvm-spirv/llvm-spirv
 CLANG_KERNEL_FLAGS = -c -x cl -emit-llvm -target spir64-unknown-unknown -cl-std=CL2.0 -Xclang -finclude-default-header
 CFLAGS = -Wall -g -lOpenCL -lrt
 
-all: opencl_device_query.exe my_kernel.spv my_host.exe
+all: opencl_device_query.exe my_kernel.spirv my_kernel.bc my_host.exe
 
 opencl_device_query.exe: opencl_device_query.c
 	$(CC) opencl_device_query.c $(CFLAGS) -o $@ $(CCLIBS)
@@ -30,11 +30,11 @@ opencl_device_query.exe: opencl_device_query.c
 %.bc: %.cl
 	$(CXX) $(CLANG_KERNEL_FLAGS) $< -o $@
 
-%.spv: %.bc
+%.spirv: %.bc
 	$(SPIRV_LLVM) $<
 
 .PHONY: clean
 
 clean:
-	rm -f *.ll *.bc *.spv *.exe
+	rm -f *.ll *.bc *.spirv *.exe
 
