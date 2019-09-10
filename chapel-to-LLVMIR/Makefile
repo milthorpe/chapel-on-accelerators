@@ -37,13 +37,13 @@ help:
 
 # Converts entire *.bc file to IR
 bc-to-ir: $(FILENAME).chpl
-	mkdir $(SAVE_DIR_NAME)
+	mkdir -p $(SAVE_DIR_NAME)
 	chpl $(FILENAME).chpl -o $(SAVE_DIR_NAME)/$(FILENAME) --llvm --savec $(SAVE_DIR_NAME)
 	llvm-dis-10 $(SAVE_DIR_NAME)/chpl__module-$(BC_OPTIMISATION).bc -o ./$(OUTPUT_FILENAME).ll
 
 
 func-to-ir: $(FILENAME).chpl
-	mkdir $(SAVE_DIR_NAME)
+	mkdir -p $(SAVE_DIR_NAME)
 	chpl $(FILENAME).chpl -o $(SAVE_DIR_NAME)/$(FILENAME) --llvm --llvm-print-ir=$(FUNCTION) --llvm-print-ir-stage=$(STAGE) > $(OUTPUT_FILENAME).ll
 
 .PHONY: clean
