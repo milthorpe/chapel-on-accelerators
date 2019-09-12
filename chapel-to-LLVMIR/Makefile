@@ -44,7 +44,7 @@ bc-to-ir: $(FILENAME).chpl
 
 func-to-ir: $(FILENAME).chpl
 	mkdir -p $(SAVE_DIR_NAME)
-	chpl $(FILENAME).chpl -o $(SAVE_DIR_NAME)/$(FILENAME) --llvm --llvm-print-ir=$(FUNCTION) --llvm-print-ir-stage=$(STAGE) > $(OUTPUT_FILENAME).ll
+	chpl $(FILENAME).chpl -o $(SAVE_DIR_NAME)/$(FILENAME) --llvm --llvm-print-ir=$(FUNCTION) --llvm-print-ir=writeln --llvm-print-ir-stage=$(STAGE) > $(OUTPUT_FILENAME).ll
 
 .PHONY: clean
 
