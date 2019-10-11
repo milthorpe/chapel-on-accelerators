@@ -31,7 +31,7 @@ opencl_device_query.exe: opencl_device_query.c
 	$(CXX) $(CLANG_KERNEL_FLAGS) $< -o $@
 
 %.spirv: %.bc
-	$(SPIRV_LLVM) $<
+	$(SPIRV_LLVM) $< -o $@
 
 .PHONY: clean
 
