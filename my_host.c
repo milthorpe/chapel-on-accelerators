@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
   } else if (useIR) {
     binary = readBinaryFile("my_kernel.spirv", &binarySize);
     program = clCreateProgramWithIL(
-        context, (const void *)&binary, binarySize, &status);
+        context, (const void *)binary, binarySize, &status);
     checkError(status, "clCreateProgramWithIL");
     free(binary);
   } else {
