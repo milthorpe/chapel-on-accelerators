@@ -178,9 +178,9 @@ int main(int argc, char *argv[]) {
     checkError(errcode_ret[0], "clCreateProgramWithBinary");
     free(binary);
   } else if (useIR) {
-    binary = readBinaryFile("my_kernel.spirv", &binarySize);
+    binary = readBinaryFile("my_kernel.spv", &binarySize);
     program = clCreateProgramWithIL(
-        context, (const void *)&binary, binarySize, &status);
+        context, (const void *)binary, binarySize, &status);
     checkError(status, "clCreateProgramWithIL");
     free(binary);
   } else {
