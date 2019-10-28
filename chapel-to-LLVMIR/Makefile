@@ -46,6 +46,13 @@ func-to-ir: $(FILENAME).chpl
 	mkdir -p $(SAVE_DIR_NAME)
 	chpl $(FILENAME).chpl -o $(SAVE_DIR_NAME)/$(FILENAME) --llvm --llvm-print-ir $(FUNCTION) --llvm-print-ir-stage $(STAGE) > $(OUTPUT_FILENAME).ll
 
+%.bc: %.ll
+	sed -i '/target triple =/c\target triple = "spir64-unknown-unknown"' $<
+	llvm-as-10 $<
+
+%.spv: %.bc
+	../SPIRV-LLVM-Translator/build/tools/llvm-spirv/llvm-spirv $<
+
 .PHONY: clean
 
 clean:
