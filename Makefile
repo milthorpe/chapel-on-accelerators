@@ -36,5 +36,5 @@ opencl_device_query.exe: opencl_device_query.c
 .PHONY: clean
 
 clean:
-	rm -f *.ll *.bc *.spirv *.exe
+	rm -f *.ll *.bc *.spv *.exe
 
