@@ -1,8 +1,8 @@
 # Convert Chapel code to readable IR
 # https://github.com/chapel-lang/chapel/blob/master/CHANGES.md
 
-FILENAME = hello
-OUTPUT_FILENAME = hello
+FILENAME ?= hello
+OUTPUT_FILENAME ?= $(FILENAME)
 
 SAVE_DIR_NAME = compiled_files
 
@@ -57,4 +57,5 @@ func-to-ir: $(FILENAME).chpl
 
 clean:
 	@rm -rf $(SAVE_DIR_NAME)
-	@rm -f $(OUTPUT_FILENAME).ll
+	@rm -f *.ll *.spv *.spt *.bc
+	@find . -maxdepth 1 -type f -executable -exec rm {} +
